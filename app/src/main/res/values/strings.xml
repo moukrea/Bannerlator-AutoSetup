@@ -1192,4 +1192,20 @@ E.g. <b>META</b> for <i>META key</i>, \n
     <string name="auto_setup_first_frame">First application frame rendered</string>
     <string name="auto_setup_early_exit">Session ended before a playable frame</string>
     <string name="auto_setup_preparing_game">Preparing %1$s…</string>
+    <string name="auto_setup_revalidating_environment">Revalidating the managed environment</string>
+    <string name="auto_setup_validating_gameplay">Checking that gameplay stays alive</string>
+    <string name="auto_setup_gameplay_validated">Gameplay remained active and rendered frames</string>
+    <string name="auto_setup_steam_client_required">This game requires Steam client services; direct EXE launch was rejected.</string>
+    <string name="auto_setup_panel_title">Automatic setup</string>
+    <string name="auto_setup_not_run">Not configured yet. Launch or repair to build the game environment automatically.</string>
+    <string name="auto_setup_repair">Repair &amp; retry</string>
+    <string name="auto_setup_record_run">Record tuning run</string>
+    <string name="auto_setup_record_explanation">The tuning run records presented-frame performance and whether the session remains stable. Input replay and parameter search will use this baseline in the next tuning stage.</string>
+    <string name="auto_setup_last_benchmark">Last run: %1$.1f presented FPS · %2$d s · %3$s</string>
+    <string name="auto_setup_stable">stable</string>
+    <string name="auto_setup_unstable">unstable</string>
+    <string name="auto_setup_fix_steam">Fix Steam requirement</string>
+    <string name="auto_setup_steam_fallback_title">Enable local Steam compatibility?</string>
+    <string name="auto_setup_steam_fallback_message">The game rejected direct launch because no Windows Steam client is running in its container. This will download the existing Goldberg compatibility component, back up the original Steam API files, apply its safest mode, and retry. Online Steam features may not work. You can restore the original files by selecting Off below.</string>
+    <string name="auto_setup_enable_fallback">Enable and retry</string>
 </resources>

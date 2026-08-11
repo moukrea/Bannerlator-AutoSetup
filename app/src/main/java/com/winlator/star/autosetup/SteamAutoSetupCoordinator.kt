@@ -27,7 +27,7 @@ object SteamAutoSetupCoordinator {
 
     fun start(activity: Activity, request: SteamAutoSetupRequest, onStatus: (AutoSetupStatus) -> Unit, onResult: (AutoSetupResult) -> Unit) {
         val journal = AutoSetupJournal(activity.applicationContext)
-        journal.read(request.gameKey)?.takeIf { !it.terminal && System.currentTimeMillis() - it.updatedAt < ACTIVE_SETUP_TTL_MS }?.let {
+        journal.read(request.gameKey)?.takeIf { !request.forceRepair && !it.terminal && System.currentTimeMillis() - it.updatedAt < ACTIVE_SETUP_TTL_MS }?.let {
             onStatus(it); onResult(AutoSetupResult.Started(request.gameKey)); return
         }
         var status = AutoSetupStatus(request.gameKey, request.gameName, AutoSetupStage.QUEUED, activity.getString(R.string.auto_setup_queued)).also { journal.write(it); onStatus(it) }
@@ -39,13 +39,7 @@ object SteamAutoSetupCoordinator {
                 }
                 move(AutoSetupStage.RESOLVING_PROFILE, activity.getString(R.string.auto_setup_resolving_profile))
                 val manager = ContainerManager(activity.applicationContext)
-                findManagedShortcut(manager, request)?.let { existing ->
-                    move(AutoSetupStage.LAUNCHING, activity.getString(R.string.auto_setup_reusing_environment))
-                    move(AutoSetupStage.VALIDATING, activity.getString(R.string.auto_setup_waiting_for_frame))
-                    launch(activity, existing, request.gameKey)
-                    activity.runOnUiThread { onResult(AutoSetupResult.Started(request.gameKey)) }
-                    return@launch
-                }
+                val existingShortcut = findManagedShortcut(manager, request)
 
                 val communityProfile = CommunityProfileResolver.resolveSteam(activity, request.appId)
                 val communityConfig = communityProfile?.config
@@ -61,19 +55,36 @@ object SteamAutoSetupCoordinator {
                     activity.getString(R.string.auto_setup_no_proton)) { move(AutoSetupStage.INSTALLING_COMPONENTS, it) }
 
                 val arm64Ec = runtime.verName.contains("arm64ec", ignoreCase = true)
-                val required = ArrayList<ContentProfile>()
+                val requested = ArrayList<ContentProfile>()
                 val translatorType = if (arm64Ec) ContentProfile.ContentType.CONTENT_TYPE_FEXCORE else ContentProfile.ContentType.CONTENT_TYPE_BOX64
                 val translatorLabel = if (arm64Ec) "FEXCore" else "Box64"
                 val wantedTranslator = communityConfig?.components?.firstOrNull { it.type.equals(translatorLabel, true) }?.target
-                AutoSetupPolicy.choose(catalog, translatorType, wantedTranslator)?.let(required::add)
+                AutoSetupPolicy.choose(catalog, translatorType, wantedTranslator)?.let(requested::add)
                 for ((label, type) in listOf("DXVK" to ContentProfile.ContentType.CONTENT_TYPE_DXVK, "VKD3D" to ContentProfile.ContentType.CONTENT_TYPE_VKD3D)) {
                     val wanted = communityConfig?.components?.firstOrNull { it.type.equals(label, true) }?.target
-                    AutoSetupPolicy.choose(catalog, type, wanted)?.let(required::add)
+                    AutoSetupPolicy.choose(catalog, type, wanted)?.let(requested::add)
                 }
-                for (profile in required.distinctBy { ContentsManager.getEntryName(it) }) ensureInstalled(activity.applicationContext, contents, profile) {
-                    move(AutoSetupStage.INSTALLING_COMPONENTS, it)
+                val required = ArrayList<ContentProfile>()
+                for (profile in requested.distinctBy { ContentsManager.getEntryName(it) }) {
+                    required += ensureInstalled(activity.applicationContext, contents, profile) {
+                        move(AutoSetupStage.INSTALLING_COMPONENTS, it)
+                    }
                 }
                 contents.syncContents()
+
+                if (existingShortcut != null && !request.forceRepair) {
+                    move(AutoSetupStage.CREATING_ENVIRONMENT, activity.getString(R.string.auto_setup_reusing_environment))
+                    move(AutoSetupStage.APPLYING_PROFILE, activity.getString(R.string.auto_setup_revalidating_environment))
+                    communityConfig?.let {
+                        val applied = CommunityConfigApply.apply(existingShortcut, it, InstalledComponents.read(activity.applicationContext), existingShortcut.container.wineVersion, GPUInformation.isAdrenoGPU(activity.applicationContext))
+                        if (!applied.ok) error(applied.message)
+                    }
+                    move(AutoSetupStage.LAUNCHING, activity.getString(R.string.auto_setup_starting_game))
+                    move(AutoSetupStage.VALIDATING, activity.getString(R.string.auto_setup_validating_gameplay))
+                    launch(activity, existingShortcut, request)
+                    activity.runOnUiThread { onResult(AutoSetupResult.Started(request.gameKey)) }
+                    return@launch
+                }
 
                 move(AutoSetupStage.CREATING_ENVIRONMENT, activity.getString(R.string.auto_setup_creating_environment))
                 val translator = required.firstOrNull { it.type == translatorType }
@@ -94,7 +105,7 @@ object SteamAutoSetupCoordinator {
                 }
                 move(AutoSetupStage.LAUNCHING, activity.getString(R.string.auto_setup_starting_game))
                 move(AutoSetupStage.VALIDATING, activity.getString(R.string.auto_setup_waiting_for_frame))
-                launch(activity, shortcut, request.gameKey)
+                launch(activity, shortcut, request)
                 activity.runOnUiThread { onResult(AutoSetupResult.Started(request.gameKey)) }
             } catch (t: Throwable) {
                 val failed = runCatching { journal.transition(status, AutoSetupStage.FAILED, t.message ?: t.javaClass.simpleName) }
@@ -116,11 +127,12 @@ object SteamAutoSetupCoordinator {
         return ContentProfile.ContentType.values().flatMap { contents.getProfiles(it).orEmpty() }
     }
     private suspend fun requireProfile(context: android.content.Context, contents: ContentsManager, profile: ContentProfile?, error: String, move: (String) -> Unit): ContentProfile {
-        val selected = profile ?: error(error); ensureInstalled(context, contents, selected, move); return selected
+        val selected = profile ?: error(error)
+        return ensureInstalled(context, contents, selected, move)
     }
-    private suspend fun ensureInstalled(context: android.content.Context, contents: ContentsManager, profile: ContentProfile, onProgress: (String) -> Unit) {
+    private suspend fun ensureInstalled(context: android.content.Context, contents: ContentsManager, profile: ContentProfile, onProgress: (String) -> Unit): ContentProfile {
         val key = ContentsManager.getEntryName(profile); contents.syncContents()
-        if (AutoSetupPolicy.isInstalled(contents.getProfileByEntryName(key))) return
+        resolveInstalled(contents, profile)?.let { return it }
         profile.remoteUrl ?: error(context.getString(R.string.auto_setup_missing_download, profile.verName))
         startContentDownload(context.applicationContext, profile)
         val result = ContentDownloadRegistry.states.map { it[key] }.filterNotNull().onEach { state ->
@@ -128,8 +140,26 @@ object SteamAutoSetupCoordinator {
             onProgress(context.getString(R.string.auto_setup_component_progress, verb, profile.verName, (state.fraction * 100).toInt()))
         }.first { it.terminal }
         if (result.phase == ContentDownloadPhase.ERROR) error(result.error ?: context.getString(R.string.auto_setup_install_failed, profile.verName))
-        contents.syncContents()
-        if (!AutoSetupPolicy.isInstalled(contents.getProfileByEntryName(key))) error(context.getString(R.string.auto_setup_installed_unusable, profile.verName))
+        repeat(10) {
+            contents.syncContents()
+            resolveInstalled(contents, profile)?.let { return it }
+            delay(200)
+        }
+        error(context.getString(R.string.auto_setup_installed_unusable, profile.verName))
+    }
+
+    /** The archive profile is authoritative: catalogs occasionally publish an alias or a newer
+     * verCode than the profile embedded in the archive. Resolve the actual on-disk profile instead
+     * of repeatedly downloading a component that has already installed successfully. */
+    private fun resolveInstalled(contents: ContentsManager, requested: ContentProfile): ContentProfile? {
+        contents.getProfileByEntryName(ContentsManager.getEntryName(requested))?.let { return it }
+        return contents.getProfiles(requested.type).orEmpty()
+            .filter(AutoSetupPolicy::isInstalled)
+            .maxByOrNull { candidate ->
+                val sameName = candidate.verName.equals(requested.verName, ignoreCase = true)
+                (if (sameName) 10_000 else 0) + if (candidate.verCode == requested.verCode) 100 else 0
+            }
+            ?.takeIf { it.verName.equals(requested.verName, ignoreCase = true) }
     }
     private suspend fun createContainer(manager: ContainerManager, contents: ContentsManager, data: JSONObject): Container? = withContext(Dispatchers.Main) {
         suspendCancellableCoroutine { c -> manager.createContainerAsync(data, contents) { if (c.isActive) c.resume(it) } }
@@ -141,10 +171,11 @@ object SteamAutoSetupCoordinator {
         } }
     }
     private fun componentToken(profile: ContentProfile) = ContentsManager.getEntryName(profile).substringAfter('-')
-    private suspend fun launch(activity: Activity, shortcut: Shortcut, gameKey: String) = withContext(Dispatchers.Main) {
+    private suspend fun launch(activity: Activity, shortcut: Shortcut, request: SteamAutoSetupRequest) = withContext(Dispatchers.Main) {
         activity.startActivity(Intent(activity, XServerDisplayActivity::class.java).apply {
             putExtra("container_id", shortcut.container.id); putExtra("shortcut_path", shortcut.file.path); putExtra("shortcut_name", shortcut.name)
-            putExtra("disableXinput", shortcut.getExtra("disableXinput", "0")); putExtra(AutoSetupRuntimeSignals.EXTRA_GAME_KEY, gameKey)
+            putExtra("disableXinput", shortcut.getExtra("disableXinput", "0")); putExtra(AutoSetupRuntimeSignals.EXTRA_GAME_KEY, request.gameKey)
+            putExtra(AutoSetupRuntimeSignals.EXTRA_RECORD_BENCHMARK, request.recordBenchmark)
         })
     }
     private const val ACTIVE_SETUP_TTL_MS = 15L * 60L * 1000L

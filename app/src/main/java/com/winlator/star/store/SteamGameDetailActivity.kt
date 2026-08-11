@@ -6,6 +6,11 @@ import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.util.Log
 import com.winlator.star.autosetup.AutoSetupResult
+import com.winlator.star.autosetup.AutoSetupJournal
+import com.winlator.star.autosetup.AutoSetupStage
+import com.winlator.star.autosetup.AutoSetupStatus
+import com.winlator.star.autosetup.AutoBenchmarkStore
+import com.winlator.star.autosetup.AutoBenchmarkSummary
 import com.winlator.star.autosetup.SteamAutoSetupCoordinator
 import com.winlator.star.autosetup.SteamAutoSetupRequest
 import androidx.activity.ComponentActivity
@@ -153,6 +158,9 @@ class SteamGameDetailActivity : ComponentActivity(), SteamRepository.SteamEventL
     private var downloadProgressValue by mutableIntStateOf(0)
     private var progressText by mutableStateOf("")
     private var progressTextVisible by mutableStateOf(false)
+    private var autoSetupStatus by mutableStateOf<AutoSetupStatus?>(null)
+    private var autoBenchmark by mutableStateOf<AutoBenchmarkSummary?>(null)
+    private var showAutoSteamFallbackDialog by mutableStateOf(false)
 
     private var showSpeedPicker by mutableStateOf(false)
     // Non-null while an uninstall is deleting files → shows the blocking progress spinner.
@@ -238,6 +246,10 @@ class SteamGameDetailActivity : ComponentActivity(), SteamRepository.SteamEventL
                     downloadProgressValue = downloadProgressValue,
                     progressText = progressText,
                     progressTextVisible = progressTextVisible,
+                    autoSetupStatus = autoSetupStatus,
+                    autoBenchmark = autoBenchmark,
+                    steamFixAvailable = autoSetupStatus?.stage == AutoSetupStage.FAILED &&
+                        autoSetupStatus?.detail == getString(R.string.auto_setup_steam_client_required),
                     goldbergVisible = gameStatus == GameStatus.INSTALLED,
                     goldbergMode = goldbergMode,
                     goldbergBusy = goldbergBusy,
@@ -265,7 +277,29 @@ class SteamGameDetailActivity : ComponentActivity(), SteamRepository.SteamEventL
                     onInstallClick = { onInstallClicked() },
                     onPauseResumeClick = { onPauseResumeClicked() },
                     onLaunchClick = { onLaunchClicked() },
+                    onRepairClick = { onLaunchClicked(forceRepair = true) },
+                    onRecordBenchmarkClick = { onLaunchClicked(recordBenchmark = true) },
+                    onSteamFixClick = { showAutoSteamFallbackDialog = true },
                 )
+
+                if (showAutoSteamFallbackDialog) {
+                    OutlinedAlertDialog(
+                        onDismissRequest = { showAutoSteamFallbackDialog = false },
+                        title = { Text(getString(R.string.auto_setup_steam_fallback_title)) },
+                        text = { Text(getString(R.string.auto_setup_steam_fallback_message)) },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                showAutoSteamFallbackDialog = false
+                                enableAutoSteamFallback()
+                            }) { Text(getString(R.string.auto_setup_enable_fallback)) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showAutoSteamFallbackDialog = false }) {
+                                Text(getString(android.R.string.cancel))
+                            }
+                        },
+                    )
+                }
 
                 // One-time third-party disclaimer — gates the FIRST cloud action (any game). On accept
                 // we persist the flag and dispatch the move the user was trying to run.
@@ -392,6 +426,12 @@ class SteamGameDetailActivity : ComponentActivity(), SteamRepository.SteamEventL
         SteamRepository.getInstance().addListener(this)
         loadGame()
         loadHeaderImage()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshAutoSetupState()
+        if (gameStatus == GameStatus.INSTALLED) launchBtnEnabled = true
     }
 
     override fun onDestroy() {
@@ -830,7 +870,7 @@ class SteamGameDetailActivity : ComponentActivity(), SteamRepository.SteamEventL
         }
     }
 
-    private fun onLaunchClicked() {
+    private fun onLaunchClicked(forceRepair: Boolean = false, recordBenchmark: Boolean = false) {
         val g = game ?: return
         if (!g.isInstalled || g.installDir.isEmpty()) {
             uninstallResult = "Game not installed"
@@ -857,8 +897,11 @@ class SteamGameDetailActivity : ComponentActivity(), SteamRepository.SteamEventL
                 val executable = GoldbergPatcher.resolveLaunchExe(this, appId, exeFiles.first().absolutePath)
                 SteamAutoSetupCoordinator.start(
                     activity = this,
-                    request = SteamAutoSetupRequest(appId, g.name, g.installDir, executable, coverUrl),
-                    onStatus = { status -> statusText = status.detail.ifBlank { status.stage.name } },
+                    request = SteamAutoSetupRequest(appId, g.name, g.installDir, executable, coverUrl, forceRepair, recordBenchmark),
+                    onStatus = { status ->
+                        autoSetupStatus = status
+                        statusText = status.detail.ifBlank { status.stage.name }
+                    },
                     onResult = { result ->
                         if (result is AutoSetupResult.Failed) {
                             launchBtnEnabled = true
@@ -868,6 +911,44 @@ class SteamGameDetailActivity : ComponentActivity(), SteamRepository.SteamEventL
                 )
             }
         }.start()
+    }
+
+    private fun refreshAutoSetupState() {
+        val key = "steam:$appId"
+        autoSetupStatus = AutoSetupJournal(this).read(key)
+        autoBenchmark = AutoBenchmarkStore(this).read(key)
+    }
+
+    private fun enableAutoSteamFallback() {
+        val g = game ?: return
+        if (goldbergBusy || goldbergDownloading) return
+        fun applyAndRetry() {
+            goldbergBusy = true
+            GoldbergPatcher.applyModeAsync(this, appId, g.installDir, g.name, GoldbergMode.REGULAR) { success, message ->
+                goldbergBusy = false
+                if (success) {
+                    goldbergMode = GoldbergMode.REGULAR
+                    onLaunchClicked(forceRepair = true)
+                } else {
+                    goldbergMessage = message
+                }
+            }
+        }
+        if (GoldbergComponent.isInstalled(this)) {
+            applyAndRetry()
+        } else {
+            goldbergDownloading = true
+            goldbergDownloadProgress = 0f
+            GoldbergComponent.downloadAsync(
+                this,
+                progress = { goldbergDownloadProgress = it },
+                done = { success, message ->
+                    goldbergDownloading = false
+                    goldbergInstalled = GoldbergComponent.isInstalled(this)
+                    if (success) applyAndRetry() else goldbergMessage = message
+                },
+            )
+        }
     }
 
     // ── Steam Cloud saves — three-tier save library (Cloud ⇄ Library ⇄ Container) ────────────
@@ -1069,6 +1150,9 @@ private fun SteamGameDetailScreen(
     downloadProgressValue: Int,
     progressText: String,
     progressTextVisible: Boolean,
+    autoSetupStatus: AutoSetupStatus?,
+    autoBenchmark: AutoBenchmarkSummary?,
+    steamFixAvailable: Boolean,
     goldbergVisible: Boolean,
     goldbergMode: GoldbergMode,
     goldbergBusy: Boolean,
@@ -1096,6 +1180,9 @@ private fun SteamGameDetailScreen(
     onInstallClick: () -> Unit,
     onPauseResumeClick: () -> Unit,
     onLaunchClick: () -> Unit,
+    onRepairClick: () -> Unit,
+    onRecordBenchmarkClick: () -> Unit,
+    onSteamFixClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -1309,6 +1396,17 @@ private fun SteamGameDetailScreen(
             ) { Text("Launch", maxLines = 1) }
         }
 
+        if (gameStatus == GameStatus.INSTALLED) {
+            AutoSetupSection(
+                status = autoSetupStatus,
+                benchmark = autoBenchmark,
+                steamFixAvailable = steamFixAvailable,
+                onRepair = onRepairClick,
+                onRecordBenchmark = onRecordBenchmarkClick,
+                onSteamFix = onSteamFixClick,
+            )
+        }
+
         if (goldbergVisible) {
             GoldbergSection(
                 installed = goldbergInstalled,
@@ -1389,6 +1487,89 @@ private fun SteamGameDetailScreen(
                 ) { Text("Done") }
             }
         }
+    }
+}
+
+@Composable
+private fun AutoSetupSection(
+    status: AutoSetupStatus?,
+    benchmark: AutoBenchmarkSummary?,
+    steamFixAvailable: Boolean,
+    onRepair: () -> Unit,
+    onRecordBenchmark: () -> Unit,
+    onSteamFix: () -> Unit,
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val busy = status?.terminal == false
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .padding(bottom = 16.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(16.dp),
+    ) {
+        Text(
+            text = context.getString(R.string.auto_setup_panel_title),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = status?.let { it.detail.ifBlank { it.stage.name } }
+                ?: context.getString(R.string.auto_setup_not_run),
+            style = MaterialTheme.typography.bodySmall,
+            color = if (status?.stage == AutoSetupStage.FAILED) MaterialTheme.colorScheme.error
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (busy) {
+            Spacer(Modifier.height(10.dp))
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
+        benchmark?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = context.getString(
+                    R.string.auto_setup_last_benchmark,
+                    it.averageFps,
+                    it.durationMs / 1000,
+                    if (it.stable) context.getString(R.string.auto_setup_stable) else context.getString(R.string.auto_setup_unstable),
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        if (steamFixAvailable) {
+            Button(
+                onClick = onSteamFix,
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(10.dp),
+            ) { Text(context.getString(R.string.auto_setup_fix_steam)) }
+            Spacer(Modifier.height(8.dp))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(
+                onClick = onRepair,
+                enabled = !busy,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(10.dp),
+            ) { Text(context.getString(R.string.auto_setup_repair)) }
+            OutlinedButton(
+                onClick = onRecordBenchmark,
+                enabled = !busy && status?.stage == AutoSetupStage.READY,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(10.dp),
+            ) { Text(context.getString(R.string.auto_setup_record_run)) }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = context.getString(R.string.auto_setup_record_explanation),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

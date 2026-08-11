@@ -839,6 +839,10 @@ public class XServerDisplayActivity extends AppCompatActivity {
      * or {@code mesaDrvWindowIds} here (those are owned by the WM thread) — the volatile int is enough.
      */
     private void driveHudFrameTick(int wid) {
+        com.winlator.star.autosetup.AutoSetupRuntimeSignals.onFramePresented(
+                this,
+                getIntent().getStringExtra(com.winlator.star.autosetup.AutoSetupRuntimeSignals.EXTRA_GAME_KEY)
+        );
         if (frameRatingWindowId == -1) return;                 // HUD inactive -> never count
         if (wid != frameRatingWindowId && wid != glZinkHealedWindowId) {
             if (!guestGlIsZink()) return;                      // only the GL/Zink present topology
@@ -1010,6 +1014,11 @@ public class XServerDisplayActivity extends AppCompatActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        com.winlator.star.autosetup.AutoSetupRuntimeSignals.onSessionStarted(
+                this,
+                getIntent().getStringExtra(com.winlator.star.autosetup.AutoSetupRuntimeSignals.EXTRA_GAME_KEY),
+                getIntent().getBooleanExtra(com.winlator.star.autosetup.AutoSetupRuntimeSignals.EXTRA_RECORD_BENCHMARK, false)
+        );
         AppUtils.hideSystemUI(this);
         AppUtils.keepScreenOn(this);
                
@@ -1800,12 +1809,15 @@ public class XServerDisplayActivity extends AppCompatActivity {
         xServer.windowManager.addOnWindowModificationListener(new WindowManager.OnWindowModificationListener() {
             @Override
             public void onUpdateWindowContent(Window window) {
+                if (window.isApplicationWindow()) {
+                    com.winlator.star.autosetup.AutoSetupRuntimeSignals.onApplicationWindow(
+                            XServerDisplayActivity.this,
+                            getIntent().getStringExtra(com.winlator.star.autosetup.AutoSetupRuntimeSignals.EXTRA_GAME_KEY),
+                            window.getName(), window.getClassName()
+                    );
+                }
                 if (!winStarted && window.isApplicationWindow()) {
                     winStarted = true;   // set first so this fires exactly once
-                    com.winlator.star.autosetup.AutoSetupRuntimeSignals.onFirstApplicationFrame(
-                            XServerDisplayActivity.this,
-                            getIntent().getStringExtra(com.winlator.star.autosetup.AutoSetupRuntimeSignals.EXTRA_GAME_KEY)
-                    );
                     xServerView.getRenderer().setCursorVisible(true);
                     cancelLaunchTimers();
                     // First real game frame: hold the launch screen a few more seconds (the game
@@ -8264,10 +8276,6 @@ return true;
 
 
 } // Closes the XServerDisplayActivity class
-
-
-
-
 
 
 

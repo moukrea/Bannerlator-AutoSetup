@@ -15,6 +15,10 @@ class AutoSetupJournal(context: Context) {
         prefs.edit().putString(key(status.gameKey), status.toJson().toString()).apply()
     }
 
+    fun clear(gameKey: String) {
+        prefs.edit().remove(key(gameKey)).apply()
+    }
+
     fun transition(current: AutoSetupStatus, next: AutoSetupStage, detail: String = ""): AutoSetupStatus {
         require(current.stage == next || AutoSetupTransitions.canTransition(current.stage, next)) {
             "Invalid auto-setup transition ${current.stage} -> $next"

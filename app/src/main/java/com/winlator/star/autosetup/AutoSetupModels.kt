@@ -54,6 +54,8 @@ data class SteamAutoSetupRequest(
     val installDir: String,
     val executablePath: String,
     val coverUrl: String?,
+    val forceRepair: Boolean = false,
+    val recordBenchmark: Boolean = false,
 ) { val gameKey: String get() = "steam:$appId" }
 
 sealed class AutoSetupResult {
