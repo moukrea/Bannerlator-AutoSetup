@@ -7,6 +7,7 @@ import org.json.JSONObject
 import java.io.BufferedWriter
 import java.io.File
 import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
@@ -22,6 +23,7 @@ object AutoInputTraceRecorder {
         val queue: ArrayBlockingQueue<String>,
         val events: AtomicLong = AtomicLong(),
         val dropped: AtomicLong = AtomicLong(),
+        val lastGamepads: ConcurrentHashMap<Int, String> = ConcurrentHashMap(),
         val writerThread: Thread,
     )
 
@@ -64,7 +66,8 @@ object AutoInputTraceRecorder {
     @JvmStatic fun key(code: Int, keysym: Int, pressed: Boolean) = record("key", code, keysym, if (pressed) 1 else 0)
 
     @JvmStatic fun gamepad(slot: Int, state: GamepadState) {
-        enqueue(JSONObject().apply {
+        val current = session ?: return
+        val payload = JSONObject().apply {
             put("type", "gamepad")
             put("slot", slot)
             put("buttons", state.buttons.toInt())
@@ -72,7 +75,10 @@ object AutoInputTraceRecorder {
             put("rx", state.thumbRX.toDouble()); put("ry", state.thumbRY.toDouble())
             put("lt", state.triggerL.toDouble()); put("rt", state.triggerR.toDouble())
             put("dx", state.getDPadX().toInt()); put("dy", state.getDPadY().toInt())
-        })
+        }
+        val signature = payload.toString()
+        if (current.lastGamepads.put(slot, signature) == signature) return
+        enqueue(payload)
     }
 
     private fun record(type: String, a: Int, b: Int, c: Int? = null) {

@@ -162,6 +162,7 @@ class SteamGameDetailActivity : ComponentActivity(), SteamRepository.SteamEventL
     private var autoSetupStatus by mutableStateOf<AutoSetupStatus?>(null)
     private var autoBenchmark by mutableStateOf<AutoBenchmarkSummary?>(null)
     private var showAutoSteamFallbackDialog by mutableStateOf(false)
+    private var autoSteamFallbackConsent = false
 
     private var showSpeedPicker by mutableStateOf(false)
     // Non-null while an uninstall is deleting files → shows the blocking progress spinner.
@@ -250,7 +251,7 @@ class SteamGameDetailActivity : ComponentActivity(), SteamRepository.SteamEventL
                     autoSetupStatus = autoSetupStatus,
                     autoBenchmark = autoBenchmark,
                     steamFixAvailable = autoSetupStatus?.stage == AutoSetupStage.FAILED &&
-                        autoSetupStatus?.detail == getString(R.string.auto_setup_steam_client_required),
+                        goldbergMode != GoldbergMode.COLDCLIENT,
                     goldbergVisible = gameStatus == GameStatus.INSTALLED,
                     goldbergMode = goldbergMode,
                     goldbergBusy = goldbergBusy,
@@ -291,6 +292,7 @@ class SteamGameDetailActivity : ComponentActivity(), SteamRepository.SteamEventL
                         confirmButton = {
                             TextButton(onClick = {
                                 showAutoSteamFallbackDialog = false
+                                autoSteamFallbackConsent = true
                                 enableAutoSteamFallback()
                             }) { Text(getString(R.string.auto_setup_enable_fallback)) }
                         },
@@ -433,6 +435,10 @@ class SteamGameDetailActivity : ComponentActivity(), SteamRepository.SteamEventL
         super.onResume()
         refreshAutoSetupState()
         if (gameStatus == GameStatus.INSTALLED) launchBtnEnabled = true
+        if (autoSteamFallbackConsent && autoSetupStatus?.stage == AutoSetupStage.FAILED &&
+            goldbergMode != GoldbergMode.COLDCLIENT && !goldbergBusy && !goldbergDownloading) {
+            enableAutoSteamFallback()
+        }
     }
 
     override fun onDestroy() {
@@ -923,12 +929,18 @@ class SteamGameDetailActivity : ComponentActivity(), SteamRepository.SteamEventL
     private fun enableAutoSteamFallback() {
         val g = game ?: return
         if (goldbergBusy || goldbergDownloading) return
+        val nextMode = when (goldbergMode) {
+            GoldbergMode.OFF -> GoldbergMode.REGULAR
+            GoldbergMode.REGULAR -> GoldbergMode.EXPERIMENTAL
+            GoldbergMode.EXPERIMENTAL -> GoldbergMode.COLDCLIENT
+            GoldbergMode.COLDCLIENT -> return
+        }
         fun applyAndRetry() {
             goldbergBusy = true
-            GoldbergPatcher.applyModeAsync(this, appId, g.installDir, g.name, GoldbergMode.REGULAR) { success, message ->
+            GoldbergPatcher.applyModeAsync(this, appId, g.installDir, g.name, nextMode) { success, message ->
                 goldbergBusy = false
                 if (success) {
-                    goldbergMode = GoldbergMode.REGULAR
+                    goldbergMode = nextMode
                     onLaunchClicked(forceRepair = true)
                 } else {
                     goldbergMessage = message

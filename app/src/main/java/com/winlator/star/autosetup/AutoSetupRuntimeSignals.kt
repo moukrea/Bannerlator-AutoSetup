@@ -13,6 +13,7 @@ object AutoSetupRuntimeSignals {
         val startedAt: Long = SystemClock.elapsedRealtime(),
         var firstApplicationAt: Long = 0,
         var frames: Long = 0,
+        var exitStatus: Int? = null,
         val recordBenchmark: Boolean = false,
     )
 
@@ -47,6 +48,22 @@ object AutoSetupRuntimeSignals {
         if (current.stage == AutoSetupStage.VALIDATING) journal.transition(current, AutoSetupStage.READY, context.getString(R.string.auto_setup_gameplay_validated))
     }
 
+    @JvmStatic fun onGuestTerminated(context: Context, gameKey: String?, status: Int) {
+        if (gameKey.isNullOrBlank()) return
+        val probe = probes[gameKey] ?: return
+        probe.exitStatus = status
+        if (status == 0) return
+        val journal = AutoSetupJournal(context)
+        val current = journal.read(gameKey) ?: return
+        if (current.stage == AutoSetupStage.LAUNCHING || current.stage == AutoSetupStage.VALIDATING || current.stage == AutoSetupStage.READY) {
+            journal.write(current.copy(
+                stage = AutoSetupStage.FAILED,
+                detail = context.getString(R.string.auto_setup_guest_crashed, status),
+                updatedAt = System.currentTimeMillis(),
+            ))
+        }
+    }
+
     @JvmStatic fun onSessionEnded(context: Context, gameKey: String?) {
         if (gameKey.isNullOrBlank()) return
         val probe = probes.remove(gameKey)
@@ -61,7 +78,8 @@ object AutoSetupRuntimeSignals {
                 durationMs = duration,
                 presentedFrames = probe.frames,
                 averageFps = probe.frames * 1000f / duration,
-                stable = current.stage == AutoSetupStage.READY,
+                stable = current.stage == AutoSetupStage.READY &&
+                    (probe.exitStatus == null || probe.exitStatus == 0) && duration >= MIN_BENCHMARK_MS,
                 inputEvents = inputTrace?.events ?: 0,
                 droppedInputEvents = inputTrace?.droppedEvents ?: 0,
                 inputTracePath = inputTrace?.path.orEmpty(),
@@ -72,4 +90,5 @@ object AutoSetupRuntimeSignals {
 
     private const val VALIDATION_MS = 12_000L
     private const val MIN_PRESENTED_FRAMES = 120L
+    private const val MIN_BENCHMARK_MS = 20_000L
 }

@@ -72,16 +72,25 @@ object SteamAutoSetupCoordinator {
                 }
                 contents.syncContents()
 
-                if (existingShortcut != null && !request.forceRepair) {
+                if (existingShortcut != null) {
                     move(AutoSetupStage.CREATING_ENVIRONMENT, activity.getString(R.string.auto_setup_reusing_environment))
                     move(AutoSetupStage.APPLYING_PROFILE, activity.getString(R.string.auto_setup_revalidating_environment))
+                    val launchShortcut = if (request.forceRepair) {
+                        writeShortcut(activity, existingShortcut.container, request)
+                        findCreatedShortcut(manager, existingShortcut.container, request)
+                            ?: error(activity.getString(R.string.auto_setup_shortcut_failed))
+                    } else existingShortcut
+                    launchShortcut.putExtra("autoSetupManaged", "1")
+                    launchShortcut.putExtra("autoSetupGameKey", request.gameKey)
+                    launchShortcut.putExtra("steamLaunchMode", "auto")
+                    launchShortcut.saveData()
                     communityConfig?.let {
-                        val applied = CommunityConfigApply.apply(existingShortcut, it, InstalledComponents.read(activity.applicationContext), existingShortcut.container.wineVersion, GPUInformation.isAdrenoGPU(activity.applicationContext))
+                        val applied = CommunityConfigApply.apply(launchShortcut, it, InstalledComponents.read(activity.applicationContext), launchShortcut.container.wineVersion, GPUInformation.isAdrenoGPU(activity.applicationContext))
                         if (!applied.ok) error(applied.message)
                     }
                     move(AutoSetupStage.LAUNCHING, activity.getString(R.string.auto_setup_starting_game))
                     move(AutoSetupStage.VALIDATING, activity.getString(R.string.auto_setup_validating_gameplay))
-                    launch(activity, existingShortcut, request)
+                    launch(activity, launchShortcut, request)
                     activity.runOnUiThread { onResult(AutoSetupResult.Started(request.gameKey)) }
                     return@launch
                 }
@@ -153,14 +162,24 @@ object SteamAutoSetupCoordinator {
      * of repeatedly downloading a component that has already installed successfully. */
     private fun resolveInstalled(contents: ContentsManager, requested: ContentProfile): ContentProfile? {
         contents.getProfileByEntryName(ContentsManager.getEntryName(requested))?.let { return it }
+        val wanted = normalizeVersion(requested.verName)
         return contents.getProfiles(requested.type).orEmpty()
             .filter(AutoSetupPolicy::isInstalled)
             .maxByOrNull { candidate ->
-                val sameName = candidate.verName.equals(requested.verName, ignoreCase = true)
-                (if (sameName) 10_000 else 0) + if (candidate.verCode == requested.verCode) 100 else 0
+                val actual = normalizeVersion(candidate.verName)
+                val nameScore = when {
+                    actual == wanted -> 10_000
+                    actual.contains(wanted) || wanted.contains(actual) -> 5_000
+                    else -> 0
+                }
+                nameScore + if (candidate.verCode == requested.verCode) 100 else 0
             }
-            ?.takeIf { it.verName.equals(requested.verName, ignoreCase = true) }
+            ?.takeIf {
+                val actual = normalizeVersion(it.verName)
+                actual == wanted || actual.contains(wanted) || wanted.contains(actual)
+            }
     }
+    private fun normalizeVersion(raw: String) = raw.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
     private suspend fun createContainer(manager: ContainerManager, contents: ContentsManager, data: JSONObject): Container? = withContext(Dispatchers.Main) {
         suspendCancellableCoroutine { c -> manager.createContainerAsync(data, contents) { if (c.isActive) c.resume(it) } }
     }

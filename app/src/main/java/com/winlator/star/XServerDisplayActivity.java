@@ -3894,6 +3894,11 @@ public class XServerDisplayActivity extends AppCompatActivity {
         guestProgramLauncherComponent.setEnvVars(envVars);
         final boolean launchLoggingEnabled = isLaunchLoggingEnabled();
         guestProgramLauncherComponent.setTerminationCallback((status) -> {
+            com.winlator.star.autosetup.AutoSetupRuntimeSignals.onGuestTerminated(
+                    this,
+                    getIntent().getStringExtra(com.winlator.star.autosetup.AutoSetupRuntimeSignals.EXTRA_GAME_KEY),
+                    status
+            );
             // The guest process died. If it never rendered a window, this is a launch failure — show
             // the failure card and let the user read it (Close finishes). If it had already rendered,
             // this is a normal exit / in-game crash: keep the existing exit-on-termination behaviour.
