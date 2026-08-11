@@ -13,10 +13,15 @@
 >
 > The current milestone is **Steam-first**: it creates and configures a managed
 > container automatically, applies the closest known community/device profile,
-> prepares the compatibility components, launches the selected game executable,
-> and records whether a real application frame was reached. Epic Games, GOG,
-> automated fallback retries, recorded-input replay, and performance autotuning
-> are planned but are **not implemented yet**.
+> reconciles downloaded components with their real on-disk profiles, and validates
+> sustained rendered gameplay instead of accepting the first Wine window. The game
+> page now exposes setup state, repair, crash/early-exit diagnostics, and a consented
+> Steam fallback ladder (Regular → Experimental → Cold Client). A tuning baseline
+> records timestamped keyboard, mouse and XInput events plus performance/stability.
+>
+> **Still to build:** deterministic playback of that trace, the target-aware
+> 30/45/60/max-FPS search engine, and equivalent autonomous flows for Epic Games
+> and GOG. The present APK does not claim those unfinished stages are functional.
 >
 > This branch is an early integration prototype. Keep the upstream project's
 > GPL-3.0 license, credits, and original project notice below when redistributing it.
