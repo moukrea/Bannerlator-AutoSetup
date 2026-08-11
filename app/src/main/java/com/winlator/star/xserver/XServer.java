@@ -157,30 +157,36 @@ public class XServer {
     }
 
     public void injectPointerMove(int x, int y) {
+        com.winlator.star.autosetup.AutoInputTraceRecorder.pointerMove(x, y);
         try (XLock lock = lock(Lockable.WINDOW_MANAGER, Lockable.INPUT_DEVICE)) {
             pointer.setPosition(x, y);
         }
     }
 
     public void injectPointerMoveDelta(int dx, int dy) {
+        com.winlator.star.autosetup.AutoInputTraceRecorder.pointerDelta(dx, dy);
         try (XLock lock = lock(Lockable.WINDOW_MANAGER, Lockable.INPUT_DEVICE)) {
             pointer.setPosition(pointer.getX() + dx, pointer.getY() + dy);
         }
     }
 
     public void injectPointerButtonPress(Pointer.Button buttonCode) {
+        com.winlator.star.autosetup.AutoInputTraceRecorder.pointerButton(buttonCode.code(), true);
         try (XLock lock = lock(Lockable.WINDOW_MANAGER, Lockable.INPUT_DEVICE)) {
             pointer.setButton(buttonCode, true);
         }
     }
 
     public void injectPointerButtonRelease(Pointer.Button buttonCode) {
+        com.winlator.star.autosetup.AutoInputTraceRecorder.pointerButton(buttonCode.code(), false);
         try (XLock lock = lock(Lockable.WINDOW_MANAGER, Lockable.INPUT_DEVICE)) {
             pointer.setButton(buttonCode, false);
         }
     }
 
     public void injectPointerButtonPulse(Pointer.Button buttonCode) {
+        com.winlator.star.autosetup.AutoInputTraceRecorder.pointerButton(buttonCode.code(), true);
+        com.winlator.star.autosetup.AutoInputTraceRecorder.pointerButton(buttonCode.code(), false);
         try (XLock lock = lock(Lockable.WINDOW_MANAGER, Lockable.INPUT_DEVICE)) {
             pointer.setButton(buttonCode, true);
             pointer.setButton(buttonCode, false);
@@ -192,12 +198,14 @@ public class XServer {
     }
 
     public void injectKeyPress(XKeycode xKeycode, int keysym) {
+        com.winlator.star.autosetup.AutoInputTraceRecorder.key(xKeycode.id, keysym, true);
         try (XLock lock = lock(Lockable.WINDOW_MANAGER, Lockable.INPUT_DEVICE)) {
             keyboard.setKeyPress(xKeycode.id, keysym);
         }
     }
 
     public void injectKeyRelease(XKeycode xKeycode) {
+        com.winlator.star.autosetup.AutoInputTraceRecorder.key(xKeycode.id, 0, false);
         try (XLock lock = lock(Lockable.WINDOW_MANAGER, Lockable.INPUT_DEVICE)) {
             keyboard.setKeyRelease(xKeycode.id);
         }

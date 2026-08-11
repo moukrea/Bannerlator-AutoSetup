@@ -21,6 +21,7 @@ object AutoSetupRuntimeSignals {
     @JvmStatic fun onSessionStarted(context: Context, gameKey: String?, recordBenchmark: Boolean) {
         if (gameKey.isNullOrBlank()) return
         probes[gameKey] = Probe(recordBenchmark = recordBenchmark)
+        if (recordBenchmark) AutoInputTraceRecorder.start(context, gameKey)
     }
 
     @JvmStatic fun onApplicationWindow(context: Context, gameKey: String?, title: String?, className: String?) {
@@ -49,6 +50,7 @@ object AutoSetupRuntimeSignals {
     @JvmStatic fun onSessionEnded(context: Context, gameKey: String?) {
         if (gameKey.isNullOrBlank()) return
         val probe = probes.remove(gameKey)
+        val inputTrace = AutoInputTraceRecorder.stop()
         val journal = AutoSetupJournal(context); val current = journal.read(gameKey) ?: return
         if (current.stage == AutoSetupStage.LAUNCHING || current.stage == AutoSetupStage.VALIDATING)
             journal.transition(current, AutoSetupStage.FAILED, context.getString(R.string.auto_setup_early_exit))
@@ -60,6 +62,9 @@ object AutoSetupRuntimeSignals {
                 presentedFrames = probe.frames,
                 averageFps = probe.frames * 1000f / duration,
                 stable = current.stage == AutoSetupStage.READY,
+                inputEvents = inputTrace?.events ?: 0,
+                droppedInputEvents = inputTrace?.droppedEvents ?: 0,
+                inputTracePath = inputTrace?.path.orEmpty(),
                 recordedAt = System.currentTimeMillis(),
             ))
         }

@@ -9,6 +9,9 @@ data class AutoBenchmarkSummary(
     val presentedFrames: Long,
     val averageFps: Float,
     val stable: Boolean,
+    val inputEvents: Long = 0,
+    val droppedInputEvents: Long = 0,
+    val inputTracePath: String = "",
     val recordedAt: Long,
 ) {
     fun toJson() = JSONObject().apply {
@@ -17,6 +20,9 @@ data class AutoBenchmarkSummary(
         put("presentedFrames", presentedFrames)
         put("averageFps", averageFps.toDouble())
         put("stable", stable)
+        put("inputEvents", inputEvents)
+        put("droppedInputEvents", droppedInputEvents)
+        put("inputTracePath", inputTracePath)
         put("recordedAt", recordedAt)
     }
 }
@@ -34,6 +40,9 @@ class AutoBenchmarkStore(context: Context) {
                 presentedFrames = json.getLong("presentedFrames"),
                 averageFps = json.getDouble("averageFps").toFloat(),
                 stable = json.getBoolean("stable"),
+                inputEvents = json.optLong("inputEvents"),
+                droppedInputEvents = json.optLong("droppedInputEvents"),
+                inputTracePath = json.optString("inputTracePath"),
                 recordedAt = json.getLong("recordedAt"),
             )
         }.getOrNull()

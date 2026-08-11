@@ -581,6 +581,7 @@ public class FakeInputWriter {
     }
 
     public synchronized void writeGamepadState(GamepadState state) {
+        com.winlator.star.autosetup.AutoInputTraceRecorder.gamepad(slot, state);
         if (!isOpen && !open())
             return;
 

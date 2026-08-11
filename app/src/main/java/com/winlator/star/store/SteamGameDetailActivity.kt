@@ -1536,6 +1536,7 @@ private fun AutoSetupSection(
                     it.averageFps,
                     it.durationMs / 1000,
                     if (it.stable) context.getString(R.string.auto_setup_stable) else context.getString(R.string.auto_setup_unstable),
+                    it.inputEvents,
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
