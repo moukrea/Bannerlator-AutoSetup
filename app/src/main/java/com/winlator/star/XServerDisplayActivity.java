@@ -1802,6 +1802,10 @@ public class XServerDisplayActivity extends AppCompatActivity {
             public void onUpdateWindowContent(Window window) {
                 if (!winStarted && window.isApplicationWindow()) {
                     winStarted = true;   // set first so this fires exactly once
+                    com.winlator.star.autosetup.AutoSetupRuntimeSignals.onFirstApplicationFrame(
+                            XServerDisplayActivity.this,
+                            getIntent().getStringExtra(com.winlator.star.autosetup.AutoSetupRuntimeSignals.EXTRA_GAME_KEY)
+                    );
                     xServerView.getRenderer().setCursorVisible(true);
                     cancelLaunchTimers();
                     // First real game frame: hold the launch screen a few more seconds (the game
@@ -2999,6 +3003,10 @@ public class XServerDisplayActivity extends AppCompatActivity {
     }
 
     private void exit() {
+        com.winlator.star.autosetup.AutoSetupRuntimeSignals.onSessionEnded(
+                this,
+                getIntent().getStringExtra(com.winlator.star.autosetup.AutoSetupRuntimeSignals.EXTRA_GAME_KEY)
+        );
         // A frozen (SIGSTOP'd) guest can't act on the SIGTERM below — resume before tearing down so
         // graceful termination isn't stuck waiting on a suspended process (any pending pulse aside).
         reshadePulseInProgress = false;

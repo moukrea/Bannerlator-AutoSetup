@@ -1169,4 +1169,27 @@ E.g. <b>META</b> for <i>META key</i>, \n
         <b>Reset Input</b> (in-game side menu) rebuilds the controller connection without restarting the game.<br /><br />
         Changes made here (out of game) apply on the game\'s <b>next launch</b>; the in-game side menu changes players live. The app-drawer Input Controls copy of this sets the default for <b>newly-created</b> containers.
     ]]></string>
+    <!-- Autonomous Steam setup -->
+    <string name="auto_setup_managed_container">Managed · %1$s</string>
+    <string name="auto_setup_queued">Queued</string>
+    <string name="auto_setup_resolving_profile">Resolving community profile</string>
+    <string name="auto_setup_reusing_environment">Reusing validated environment</string>
+    <string name="auto_setup_waiting_for_frame">Waiting for the first application frame</string>
+    <string name="auto_setup_profile_match">%1$s profile · %2$d%% device confidence</string>
+    <string name="auto_setup_preparing_layers">Preparing compatibility layers</string>
+    <string name="auto_setup_no_proton">No Proton runtime is available</string>
+    <string name="auto_setup_component_progress">%1$s %2$s · %3$d%%</string>
+    <string name="auto_setup_downloading">Downloading</string>
+    <string name="auto_setup_installing">Installing</string>
+    <string name="auto_setup_missing_download">%1$s is not installed and has no download source</string>
+    <string name="auto_setup_install_failed">Install failed for %1$s</string>
+    <string name="auto_setup_installed_unusable">%1$s was installed but is not usable</string>
+    <string name="auto_setup_creating_environment">Creating a game-owned environment</string>
+    <string name="auto_setup_environment_failed">The managed environment could not be created</string>
+    <string name="auto_setup_creating_launcher">Creating the Steam-aware launcher</string>
+    <string name="auto_setup_shortcut_failed">The managed Steam shortcut was not created</string>
+    <string name="auto_setup_starting_game">Starting the game</string>
+    <string name="auto_setup_first_frame">First application frame rendered</string>
+    <string name="auto_setup_early_exit">Session ended before a playable frame</string>
+    <string name="auto_setup_preparing_game">Preparing %1$s…</string>
 </resources>

@@ -399,7 +399,18 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         envVars.put("SSL_CERT_DIR", rootDir.getPath() + "/usr/etc/tls/certs");
         envVars.put("WINE_X11FORCEGLX", "1");
         envVars.put("WINE_GST_NO_GL", "1");
-        envVars.put("SteamGameId", "0");
+        // Steam library shortcuts carry their real app id. Supplying both variables mirrors
+        // Steam/Proton's launch environment and fixes titles that only need client-provided identity.
+        String steamAppId = "0";
+        if (shortcut != null && "steam".equals(shortcut.getExtra("storeSource", ""))) {
+            String taggedId = shortcut.getExtra("steamAppId", "0").trim();
+            try {
+                if (Long.parseLong(taggedId) > 0) steamAppId = taggedId;
+            }
+            catch (NumberFormatException ignored) {}
+        }
+        envVars.put("SteamAppId", steamAppId);
+        envVars.put("SteamGameId", steamAppId);
         envVars.put("PROTON_AUDIO_CONVERT", "0");
         envVars.put("PROTON_VIDEO_CONVERT", "0");
         envVars.put("PROTON_DEMUX", "0");

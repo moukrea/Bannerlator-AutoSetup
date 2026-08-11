@@ -5,6 +5,10 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.util.LruCache
+import com.winlator.star.R
+import com.winlator.star.autosetup.AutoSetupResult
+import com.winlator.star.autosetup.SteamAutoSetupCoordinator
+import com.winlator.star.autosetup.SteamAutoSetupRequest
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
@@ -310,13 +314,15 @@ class SteamGamesActivity : ComponentActivity(), SteamRepository.SteamEventListen
             }
             val coverUrl = "https://shared.steamstatic.com/store_item_assets/steam/apps/${game.appId}/library_600x900.jpg"
 
-            if (exeFiles.size == 1) {
-                runOnUiThread { startAddToShortcuts(game.name, exeFiles[0].absolutePath, coverUrl) }
-                return@Thread
-            }
-            val candidates = exeFiles.map { it.absolutePath }
             runOnUiThread {
-                showExePicker = SteamExePickerData(game.name, candidates, coverUrl)
+                statusText = getString(R.string.auto_setup_preparing_game, game.name)
+                val executable = GoldbergPatcher.resolveLaunchExe(this, game.appId, exeFiles.first().absolutePath)
+                SteamAutoSetupCoordinator.start(
+                    activity = this,
+                    request = SteamAutoSetupRequest(game.appId, game.name, game.installDir, executable, coverUrl),
+                    onStatus = { status -> statusText = status.detail.ifBlank { status.stage.name } },
+                    onResult = { result -> if (result is AutoSetupResult.Failed) uninstallResult = result.message },
+                )
             }
         }.start()
     }

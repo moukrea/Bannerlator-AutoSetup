@@ -5,6 +5,22 @@
 <h1 align="center">Bannerlator</h1>
 <p align="center"><b>Windows applications and games on Android.</b></p>
 
+> [!IMPORTANT]
+> **This repository is an experimental autonomous-setup fork maintained at
+> [moukrea/Bannerlator-AutoSetup](https://github.com/moukrea/Bannerlator-AutoSetup).**
+> It is based on [The412Banner/Bannerlator](https://github.com/The412Banner/Bannerlator)
+> and is not an official Bannerlator release.
+>
+> The current milestone is **Steam-first**: it creates and configures a managed
+> container automatically, applies the closest known community/device profile,
+> prepares the compatibility components, launches the selected game executable,
+> and records whether a real application frame was reached. Epic Games, GOG,
+> automated fallback retries, recorded-input replay, and performance autotuning
+> are planned but are **not implemented yet**.
+>
+> This branch is an early integration prototype. Keep the upstream project's
+> GPL-3.0 license, credits, and original project notice below when redistributing it.
+
 <p align="center">
   <img src="https://img.shields.io/github/downloads/The412Banner/Bannerlator/total?style=for-the-badge&label=Downloads&color=ff2d9b" alt="Total Downloads">
   <img src="https://img.shields.io/badge/Platform-Android%208.0%2B-7a4cff?style=for-the-badge" alt="Platform">

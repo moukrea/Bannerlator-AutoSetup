@@ -5,6 +5,9 @@ name: CI Build (artifacts only)
 # the SAME reusable build, so the build logic lives in exactly one place.
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       release_number:
@@ -19,4 +22,4 @@ jobs:
   build:
     uses: ./.github/workflows/_build.yml
     with:
-      release_number: ${{ inputs.release_number }}
+      release_number: ${{ inputs.release_number || 'ci-main' }}
