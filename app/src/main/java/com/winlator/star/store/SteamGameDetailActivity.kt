@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.util.Log
+import com.winlator.star.R
 import com.winlator.star.autosetup.AutoSetupResult
 import com.winlator.star.autosetup.AutoSetupJournal
 import com.winlator.star.autosetup.AutoSetupStage
